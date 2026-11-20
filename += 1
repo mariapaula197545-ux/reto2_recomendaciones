@@ -1,0 +1,243 @@
+[1mdiff --git a/kafka/productor_compras.py b/kafka/productor_compras.py[m
+[1mindex 5dc375e..af5c84b 100644[m
+[1m--- a/kafka/productor_compras.py[m
+[1m+++ b/kafka/productor_compras.py[m
+[36m@@ -11,10 +11,23 @@[m [mBASE = Path(__file__).resolve().parent.parent[m
+ ARCHIVO = BASE / "datos" / "compras_limpias.csv"[m
+ [m
+ parser = argparse.ArgumentParser()[m
+[31m-parser.add_argument("--limite", type=int, default=100)[m
+[31m-parser.add_argument("--pausa", type=float, default=0.1)[m
+[32m+[m[32mparser.add_argument("--limite", type=int, default=1000)[m
+[32m+[m[32mparser.add_argument("--pausa", type=float, default=0.01)[m
+ args = parser.parse_args()[m
+ [m
+[32m+[m[32mif args.limite < 0:[m
+[32m+[m[32m    parser.error("--limite no puede ser negativo")[m
+[32m+[m
+[32m+[m[32mif args.pausa < 0:[m
+[32m+[m[32m    parser.error("--pausa no puede ser negativa")[m
+[32m+[m
+[32m+[m[32mprint("================================")[m
+[32m+[m[32mprint(" PRODUCTOR DE COMPRAS - KAFKA")[m
+[32m+[m[32mprint("================================")[m
+[32m+[m[32mprint("Archivo:", ARCHIVO)[m
+[32m+[m[32mprint("Limite:", args.limite if args.limite else "Sin limite")[m
+[32m+[m[32mprint("Pausa:", args.pausa, "segundos")[m
+[32m+[m
+ producer = KafkaProducer([m
+     bootstrap_servers=["localhost:29092"],[m
+     value_serializer=lambda v: json.dumps([m
+[36m@@ -49,20 +62,21 @@[m [mtry:[m
+                 ).isoformat()[m
+             }[m
+ [m
+[32m+[m[32m            # Espera confirmacion de Kafka antes de contar[m
+             producer.send([m
+                 "compras-retail",[m
+                 key=evento["cliente_id"],[m
+                 value=evento[m
+[31m-            )[m
+[32m+[m[32m            ).get(timeout=30)[m
+ [m
+             enviados += 1[m
+ [m
+[31m-            if enviados <= 10 or enviados % 1000 == 0:[m
+[31m-                print([m
+[31m-                    f"Enviado {enviados}: "[m
+[31m-                    f"Cliente={evento['cliente_id']} "[m
+[31m-                    f"Producto={evento['producto_id']}"[m
+[31m-                )[m
+[32m+[m[32m            print([m
+[32m+[m[32m                f"[{enviados}] COMPRA ENVIADA | "[m
+[32m+[m[32m                f"Cliente: {evento['cliente_id']} | "[m
+[32m+[m[32m                f"Producto: {evento['producto_id']} | "[m
+[32m+[m[32m                f"Total: {evento['total']:.2f}"[m
+[32m+[m[32m            )[m
+ [m
+             if args.pausa > 0:[m
+                 time.sleep(args.pausa)[m
+[36m@@ -72,11 +86,20 @@[m [mtry:[m
+ [m
+     producer.flush(timeout=120)[m
+ [m
+[32m+[m[32mexcept KeyboardInterrupt:[m
+[32m+[m[32m    print("\nEnvio detenido por el usuario.")[m
+[32m+[m
+[32m+[m[32mexcept Exception as e:[m
+[32m+[m[32m    print("\nERROR DURANTE EL ENVIO:", e)[m
+[32m+[m
+ finally:[m
+     producer.close()[m
+ [m
+ duracion = time.perf_counter() - inicio[m
+ [m
+[31m-print("\nENVIO FINALIZADO")[m
+[31m-print("Eventos enviados:", enviados)[m
+[32m+[m[32mprint("\n================================")[m
+[32m+[m[32mprint(" RESUMEN DEL PRODUCTOR")[m
+[32m+[m[32mprint("================================")[m
+[32m+[m[32mprint("Compras enviadas:", enviados)[m
+ print("Tiempo:", round(duracion, 2), "segundos")[m
+[32m+[m[32mprint("================================")[m
+[1mdiff --git a/preparar_datos.py b/preparar_datos.py[m
+[1mindex ae3df47..76f35a1 100644[m
+[1m--- a/preparar_datos.py[m
+[1m+++ b/preparar_datos.py[m
+[36m@@ -8,46 +8,132 @@[m [mDATOS = BASE / "datos"[m
+ [m
+ ZIP = DATOS / "online+retail.zip"[m
+ EXCEL = DATOS / "Online Retail.xlsx"[m
+[31m-CSV = DATOS / "compras_limpias.csv"[m
+ [m
+[31m-# Extraer Excel[m
+[32m+[m[32mCSV_COMPLETO = DATOS / "compras_completas.csv"[m
+[32m+[m[32mCSV_LIMPIO = DATOS / "compras_limpias.csv"[m
+[32m+[m
+[32m+[m[32m# ======================================[m
+[32m+[m[32m# 1. EXTRAER ARCHIVO[m
+[32m+[m[32m# ======================================[m
+[32m+[m
+ if not EXCEL.exists():[m
+     with zipfile.ZipFile(ZIP, "r") as archivo:[m
+         archivo.extract("Online Retail.xlsx", DATOS)[m
+ [m
+[31m-# Leer registros[m
+[32m+[m[32m# ======================================[m
+[32m+[m[32m# 2. LEER DATASET ORIGINAL[m
+[32m+[m[32m# ======================================[m
+[32m+[m
+ print("Leyendo base de datos...")[m
+[32m+[m
+ df = pd.read_excel(EXCEL, engine="openpyxl")[m
+ [m
+ print("Registros originales:", len(df))[m
+ print("Columnas:", df.columns.tolist())[m
+ [m
+[31m-# Limpiar compras[m
+[31m-df = df.dropna(subset=["CustomerID"]).copy()[m
+[31m-df = df[[m
+[31m-    (df["Quantity"] > 0) &[m
+[31m-    (df["UnitPrice"] > 0)[m
+[32m+[m[32m# ======================================[m
+[32m+[m[32m# 3. DATASET COMPLETO[m
+[32m+[m[32m# ======================================[m
+[32m+[m
+[32m+[m[32m# Conservar todas las transacciones originales.[m
+[32m+[m[32m# Incluye registros sin cliente identificado,[m
+[32m+[m[32m# devoluciones y posibles duplicados.[m
+[32m+[m
+[32m+[m[32mcompleto = df.copy()[m
+[32m+[m
+[32m+[m[32mcompleto["StockCode"] = ([m
+[32m+[m[32m    completo["StockCode"].astype("string")[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mcompleto["InvoiceNo"] = ([m
+[32m+[m[32m    completo["InvoiceNo"].astype("string")[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mcompleto["Total"] = ([m
+[32m+[m[32m    completo["Quantity"] *[m
+[32m+[m[32m    completo["UnitPrice"][m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mcompleto.to_csv([m
+[32m+[m[32m    CSV_COMPLETO,[m
+[32m+[m[32m    index=False,[m
+[32m+[m[32m    encoding="utf-8"[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mprint("\nDATASET COMPLETO")[m
+[32m+[m[32mprint("Registros:", len(completo))[m
+[32m+[m[32mprint("Archivo:", CSV_COMPLETO)[m
+[32m+[m
+[32m+[m[32m# ======================================[m
+[32m+[m[32m# 4. DATASET PARA RECOMENDACIONES[m
+[32m+[m[32m# ======================================[m
+[32m+[m
+[32m+[m[32mlimpio = df.dropna([m
+[32m+[m[32m    subset=["CustomerID"][m
+[32m+[m[32m).copy()[m
+[32m+[m
+[32m+[m[32mlimpio = limpio[[m
+[32m+[m[32m    (limpio["Quantity"] > 0) &[m
+[32m+[m[32m    (limpio["UnitPrice"] > 0)[m
+ ].copy()[m
+ [m
+[31m-df = df[[m
+[31m-    ~df["InvoiceNo"].astype(str).str.startswith("C")[m
+[32m+[m[32mlimpio = limpio[[m
+[32m+[m[32m    ~limpio["InvoiceNo"][m
+[32m+[m[32m    .astype(str)[m
+[32m+[m[32m    .str.startswith("C")[m
+ ].copy()[m
+ [m
+[31m-df = df.drop_duplicates()[m
+[32m+[m[32mlimpio = limpio.drop_duplicates()[m
+[32m+[m
+[32m+[m[32mlimpio["CustomerID"] = ([m
+[32m+[m[32m    limpio["CustomerID"][m
+[32m+[m[32m    .astype(int)[m
+[32m+[m[32m    .astype(str)[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mlimpio["StockCode"] = ([m
+[32m+[m[32m    limpio["StockCode"].astype(str)[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mlimpio["InvoiceNo"] = ([m
+[32m+[m[32m    limpio["InvoiceNo"].astype(str)[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mlimpio["Total"] = ([m
+[32m+[m[32m    limpio["Quantity"] *[m
+[32m+[m[32m    limpio["UnitPrice"][m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32mlimpio.to_csv([m
+[32m+[m[32m    CSV_LIMPIO,[m
+[32m+[m[32m    index=False,[m
+[32m+[m[32m    encoding="utf-8"[m
+[32m+[m[32m)[m
+[32m+[m
+[32m+[m[32m# ======================================[m
+[32m+[m[32m# 5. RESULTADOS[m
+[32m+[m[32m# ======================================[m
+[32m+[m
+[32m+[m[32mprint("\n======================================")[m
+[32m+[m[32mprint(" RETO 2 - PREPARACION DE DATOS")[m
+[32m+[m[32mprint("======================================")[m
+[32m+[m
+[32m+[m[32mprint("Registros originales:", len(df))[m
+[32m+[m[32mprint("Registros completos:", len(completo))[m
+[32m+[m[32mprint("Registros para recomendaciones:", len(limpio))[m
+ [m
+[31m-# Preparar identificadores[m
+[31m-df["CustomerID"] = df["CustomerID"].astype(int).astype(str)[m
+[31m-df["StockCode"] = df["StockCode"].astype(str)[m
+[31m-df["InvoiceNo"] = df["InvoiceNo"].astype(str)[m
+[32m+[m[32mprint([m
+[32m+[m[32m    "Clientes únicos:",[m
+[32m+[m[32m    limpio["CustomerID"].nunique()[m
+[32m+[m[32m)[m
+ [m
+[31m-# Calcular total[m
+[31m-df["Total"] = df["Quantity"] * df["UnitPrice"][m
+[32m+[m[32mprint([m
+[32m+[m[32m    "Productos únicos:",[m
+[32m+[m[32m    limpio["StockCode"].nunique()[m
+[32m+[m[32m)[m
+ [m
+[31m-# Guardar CSV[m
+[31m-df.to_csv(CSV, index=False, encoding="utf-8")[m
+[32m+[m[32mprint("\nArchivos generados:")[m
+[32m+[m[32mprint(CSV_COMPLETO)[m
+[32m+[m[32mprint(CSV_LIMPIO)[m
+ [m
+[31m-print("\nBASE DE DATOS PREPARADA")[m
+[31m-print("Registros limpios:", len(df))[m
+[31m-print("Clientes únicos:", df["CustomerID"].nunique())[m
+[31m-print("Productos únicos:", df["StockCode"].nunique())[m
+[31m-print("Archivo generado:", CSV)[m
+[32m+[m[32mprint("\nPREPARACION FINALIZADA")[m
