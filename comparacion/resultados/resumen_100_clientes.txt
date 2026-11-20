@@ -1,0 +1,15 @@
+
+========================================
+ RETO 2 - COMPARACION DE 100 CLIENTES
+========================================
+
+Clientes disponibles en Spark: 4110
+Clientes disponibles en Neo4j: 100
+Clientes con Top 5 completo en ambos: 100
+
+Clientes con al menos una coincidencia: 96
+
+PROMEDIO COINCIDENCIA TOP 5: 48.20%
+PROMEDIO JACCARD: 0.3422
+
+Archivo de resultados: C:\Users\maria\Downloads\reto2_recomendaciones\comparacion\resultados\comparacion_100_clientes.csv

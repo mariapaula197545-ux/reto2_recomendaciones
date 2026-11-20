@@ -7,13 +7,60 @@ from pathlib import Path
 from datetime import datetime, timezone
 from kafka import KafkaProducer
 
+# ======================================
+# CONFIGURACION DEL PROYECTO
+# ======================================
+
 BASE = Path(__file__).resolve().parent.parent
 ARCHIVO = BASE / "datos" / "compras_limpias.csv"
 
+# ======================================
+# ARGUMENTOS
+# ======================================
+
 parser = argparse.ArgumentParser()
-parser.add_argument("--limite", type=int, default=100)
-parser.add_argument("--pausa", type=float, default=0.1)
+
+parser.add_argument(
+    "--limite",
+    type=int,
+    default=1000,
+    help="Cantidad de compras a enviar. 0 = todas"
+)
+
+parser.add_argument(
+    "--pausa",
+    type=float,
+    default=0.01,
+    help="Tiempo de espera entre mensajes"
+)
+
 args = parser.parse_args()
+
+if args.limite < 0:
+    parser.error("--limite no puede ser negativo")
+
+if args.pausa < 0:
+    parser.error("--pausa no puede ser negativa")
+
+print("================================")
+print(" PRODUCTOR DE COMPRAS - KAFKA")
+print("================================")
+print("Archivo:", ARCHIVO)
+print("Limite:", args.limite if args.limite else "Sin limite")
+print("Pausa:", args.pausa, "segundos")
+
+# ======================================
+# VERIFICAR ARCHIVO
+# ======================================
+
+if not ARCHIVO.exists():
+    parser.error(
+        f"No se encontro el archivo: {ARCHIVO}"
+    )
+
+# ======================================
+# CONEXION A KAFKA
+# ======================================
 
 producer = KafkaProducer(
     bootstrap_servers=["localhost:29092"],
@@ -25,14 +72,24 @@ producer = KafkaProducer(
     retries=5
 )
 
+# ======================================
+# ENVIO DE COMPRAS
+# ======================================
+
 enviados = 0
 inicio = time.perf_counter()
 
 try:
-    with open(ARCHIVO, encoding="utf-8", newline="") as f:
+    with open(
+        ARCHIVO,
+        encoding="utf-8",
+        newline=""
+    ) as f:
+
         lector = csv.DictReader(f)
 
         for fila in lector:
+
             evento = {
                 "tipo_evento": "COMPRA",
                 "factura": fila["InvoiceNo"],
@@ -49,20 +106,22 @@ try:
                 ).isoformat()
             }
 
+            # Enviar evento y esperar confirmacion
             producer.send(
                 "compras-retail",
                 key=evento["cliente_id"],
                 value=evento
-            )
+            ).get(timeout=30)
 
+            # Contar cada compra una sola vez
             enviados += 1
 
-            if enviados <= 10 or enviados % 1000 == 0:
-                print(
-                    f"Enviado {enviados}: "
-                    f"Cliente={evento['cliente_id']} "
-                    f"Producto={evento['producto_id']}"
-                )
+            print(
+                f"[{enviados}] COMPRA ENVIADA | "
+                f"Cliente: {evento['cliente_id']} | "
+                f"Producto: {evento['producto_id']} | "
+                f"Total: {evento['total']:.2f}"
+            )
 
             if args.pausa > 0:
                 time.sleep(args.pausa)
@@ -70,13 +129,27 @@ try:
             if args.limite > 0 and enviados >= args.limite:
                 break
 
+    # Confirmar envios pendientes
     producer.flush(timeout=120)
+
+except KeyboardInterrupt:
+    print("\nEnvio detenido por el usuario.")
+
+except Exception as e:
+    print("\nERROR DURANTE EL ENVIO:", e)
 
 finally:
     producer.close()
 
+# ======================================
+# RESUMEN FINAL
+# ======================================
+
 duracion = time.perf_counter() - inicio
 
-print("\nENVIO FINALIZADO")
-print("Eventos enviados:", enviados)
+print("\n================================")
+print(" RESUMEN DEL PRODUCTOR")
+print("================================")
+print("Compras enviadas:", enviados)
 print("Tiempo:", round(duracion, 2), "segundos")
+print("================================")

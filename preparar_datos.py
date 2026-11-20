@@ -8,46 +8,132 @@ DATOS = BASE / "datos"
 
 ZIP = DATOS / "online+retail.zip"
 EXCEL = DATOS / "Online Retail.xlsx"
-CSV = DATOS / "compras_limpias.csv"
 
-# Extraer Excel
+CSV_COMPLETO = DATOS / "compras_completas.csv"
+CSV_LIMPIO = DATOS / "compras_limpias.csv"
+
+# ======================================
+# 1. EXTRAER ARCHIVO
+# ======================================
+
 if not EXCEL.exists():
     with zipfile.ZipFile(ZIP, "r") as archivo:
         archivo.extract("Online Retail.xlsx", DATOS)
 
-# Leer registros
+# ======================================
+# 2. LEER DATASET ORIGINAL
+# ======================================
+
 print("Leyendo base de datos...")
+
 df = pd.read_excel(EXCEL, engine="openpyxl")
 
 print("Registros originales:", len(df))
 print("Columnas:", df.columns.tolist())
 
-# Limpiar compras
-df = df.dropna(subset=["CustomerID"]).copy()
-df = df[
-    (df["Quantity"] > 0) &
-    (df["UnitPrice"] > 0)
+# ======================================
+# 3. DATASET COMPLETO
+# ======================================
+
+# Conservar todas las transacciones originales.
+# Incluye registros sin cliente identificado,
+# devoluciones y posibles duplicados.
+
+completo = df.copy()
+
+completo["StockCode"] = (
+    completo["StockCode"].astype("string")
+)
+
+completo["InvoiceNo"] = (
+    completo["InvoiceNo"].astype("string")
+)
+
+completo["Total"] = (
+    completo["Quantity"] *
+    completo["UnitPrice"]
+)
+
+completo.to_csv(
+    CSV_COMPLETO,
+    index=False,
+    encoding="utf-8"
+)
+
+print("\nDATASET COMPLETO")
+print("Registros:", len(completo))
+print("Archivo:", CSV_COMPLETO)
+
+# ======================================
+# 4. DATASET PARA RECOMENDACIONES
+# ======================================
+
+limpio = df.dropna(
+    subset=["CustomerID"]
+).copy()
+
+limpio = limpio[
+    (limpio["Quantity"] > 0) &
+    (limpio["UnitPrice"] > 0)
 ].copy()
 
-df = df[
-    ~df["InvoiceNo"].astype(str).str.startswith("C")
+limpio = limpio[
+    ~limpio["InvoiceNo"]
+    .astype(str)
+    .str.startswith("C")
 ].copy()
 
-df = df.drop_duplicates()
+limpio = limpio.drop_duplicates()
 
-# Preparar identificadores
-df["CustomerID"] = df["CustomerID"].astype(int).astype(str)
-df["StockCode"] = df["StockCode"].astype(str)
-df["InvoiceNo"] = df["InvoiceNo"].astype(str)
+limpio["CustomerID"] = (
+    limpio["CustomerID"]
+    .astype(int)
+    .astype(str)
+)
 
-# Calcular total
-df["Total"] = df["Quantity"] * df["UnitPrice"]
+limpio["StockCode"] = (
+    limpio["StockCode"].astype(str)
+)
 
-# Guardar CSV
-df.to_csv(CSV, index=False, encoding="utf-8")
+limpio["InvoiceNo"] = (
+    limpio["InvoiceNo"].astype(str)
+)
 
-print("\nBASE DE DATOS PREPARADA")
-print("Registros limpios:", len(df))
-print("Clientes únicos:", df["CustomerID"].nunique())
-print("Productos únicos:", df["StockCode"].nunique())
-print("Archivo generado:", CSV)
+limpio["Total"] = (
+    limpio["Quantity"] *
+    limpio["UnitPrice"]
+)
+
+limpio.to_csv(
+    CSV_LIMPIO,
+    index=False,
+    encoding="utf-8"
+)
+
+# ======================================
+# 5. RESULTADOS
+# ======================================
+
+print("\n======================================")
+print(" RETO 2 - PREPARACION DE DATOS")
+print("======================================")
+
+print("Registros originales:", len(df))
+print("Registros completos:", len(completo))
+print("Registros para recomendaciones:", len(limpio))
+
+print(
+    "Clientes únicos:",
+    limpio["CustomerID"].nunique()
+)
+
+print(
+    "Productos únicos:",
+    limpio["StockCode"].nunique()
+)
+
+print("\nArchivos generados:")
+print(CSV_COMPLETO)
+print(CSV_LIMPIO)
+
+print("\nPREPARACION FINALIZADA")
