@@ -1,0 +1,4 @@
+RETO 2 - PROCESAMIENTO CON APACHE SPARK
+Registros procesados: 541909
+Motor: Apache Spark
+Archivo: compras_completas.csv
