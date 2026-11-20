@@ -1,0 +1,11 @@
+cliente,algoritmo,producto,puntaje,posicion,coincide_con_otro_modelo
+17850,Spark,22423,848.0,1,True
+17850,Spark,85099B,823.0,2,False
+17850,Spark,47566,808.0,3,True
+17850,Spark,22469,790.0,4,False
+17850,Spark,22470,772.0,5,False
+17850,Neo4j,47566,365.0,1,True
+17850,Neo4j,22423,343.0,2,True
+17850,Neo4j,22113,334.0,3,False
+17850,Neo4j,20685,321.0,4,False
+17850,Neo4j,21733,318.0,5,False

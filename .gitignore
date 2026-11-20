@@ -1,0 +1,28 @@
+
+# Credenciales y secretos
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*credentials*
+.aws/
+*.secret
+accessKeys.csv
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Archivos temporales
+*.log
+.DS_Store
+
+# Datos originales y procesados
+datos/*.xlsx
+datos/compras_limpias.csv
+
+# Archivos locales de Docker
+docker-data/

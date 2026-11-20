@@ -1,0 +1,8 @@
+COMPARACIÓN DE RECOMENDACIONES
+Cliente: 17850
+Recomendaciones Spark: 5
+Recomendaciones Neo4j: 5
+Productos coincidentes: 2
+Coincidencia Top 5: 40.00%
+Similitud Jaccard: 0.2500
+Nota: la coincidencia no mide precision ni relevancia real.
